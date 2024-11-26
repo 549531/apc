@@ -1,0 +1,17 @@
+parse:
+  additional_commands:
+    CPMAddPackage: 
+      kwargs:
+        NAME: '*'
+        VERSION: '*'
+        PATCHES: '*'
+        DOWNLOAD_ONLY: '*'
+        DOWNLOAD_COMMAND: '*'
+        URL: '*'
+        URL_HASH: '*'
+        GIT_REPOSITORY: '*'
+        GIT_TAG: '*'
+        GIT_SUBMODULES: '*'
+        GIT_SHALLOW: '*'
+        GITHUB_REPOSITORY: '*'
+        OPTIONS: '*'

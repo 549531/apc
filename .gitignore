@@ -1,0 +1,5 @@
+.cache
+.devenv
+.direnv
+compile_commands.json
+result*

@@ -1,0 +1,11 @@
+[formatter.c]
+command = 'clang-format'
+options = ['-i']
+includes = ['*.[ch]', '*.[ch]pp']
+[formatter.cmake]
+command = 'cmake-format'
+options = ['-i']
+includes = ['CMakeLists.txt', '*/CMakeLists.txt']
+[formatter.nix]
+command = 'nixpkgs-fmt'
+includes = ['*.nix']
