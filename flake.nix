@@ -17,6 +17,10 @@
       url = "https://github.com/cpm-cmake/CPM.cmake/releases/download/v0.40.2/CPM.cmake";
       flake = false;
     };
+    incbin = {
+      url = "github:graphitemaster/incbin";
+      flake = false;
+    };
   };
 
   nixConfig = {
@@ -48,7 +52,15 @@
 
             buildInputs = [
               pkgs.SDL2
-            ];
+              pkgs.glew
+            ] ++ (if pkgs.stdenv.hostPlatform.isDarwin then [
+              pkgs.OpenGL
+            ] else [
+              pkgs.libGL
+              pkgs.xorg.libICE
+              pkgs.xorg.libSM
+              pkgs.xorg.libXext
+            ]);
 
             patchPhase = ''
               cp -f ${inputs.cpm-cmake} cmake/CPM.cmake
@@ -56,7 +68,12 @@
 
             cmakeFlags = [
               "-DCPM_USE_LOCAL_PACKAGES=ON"
+              "-DCPM_incbin_SOURCE=${config.packages.incbin}"
             ];
+          };
+
+          incbin = pkgs.linkFarm "incbin" {
+            "incbin.h" = "${inputs.incbin}/incbin.h";
           };
 
           ci = pkgs.linkFarm "ci" {
@@ -82,6 +99,7 @@
             pkgs.clinfo
             pkgs.cmake-format
             pkgs.devenv
+            pkgs.glslls
             pkgs.nixpkgs-fmt
             pkgs.treefmt
           ] ++ config.packages.apc.buildInputs ++ config.packages.apc.nativeBuildInputs;

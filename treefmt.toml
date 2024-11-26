@@ -1,7 +1,7 @@
 [formatter.c]
 command = 'clang-format'
 options = ['-i']
-includes = ['*.[ch]', '*.[ch]pp']
+includes = ['*.[ch]', '*.[ch]pp', '*.glsl']
 [formatter.cmake]
 command = 'cmake-format'
 options = ['-i']

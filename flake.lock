@@ -198,6 +198,22 @@
         "type": "github"
       }
     },
+    "incbin": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1636232473,
+        "narHash": "sha256-9YK1fy+NOJH8glSfiq2sy+Xcqda1SgT6YpxSKjBgFVI=",
+        "owner": "graphitemaster",
+        "repo": "incbin",
+        "rev": "6e576cae5ab5810f25e2631f2e0b80cbe7dc8cbf",
+        "type": "github"
+      },
+      "original": {
+        "owner": "graphitemaster",
+        "repo": "incbin",
+        "type": "github"
+      }
+    },
     "libgit2": {
       "flake": false,
       "locked": {
@@ -365,6 +381,7 @@
         "devenv": "devenv",
         "devenv-root": "devenv-root",
         "flake-parts": "flake-parts_2",
+        "incbin": "incbin",
         "mk-shell-bin": "mk-shell-bin",
         "nix2container": "nix2container",
         "nixpkgs": "nixpkgs_4"
