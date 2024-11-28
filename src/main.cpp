@@ -1,3 +1,6 @@
+#include <cerrno>
+#include <cstring>
+
 #define INCBIN_PREFIX
 #define INCBIN_STYLE INCBIN_STYLE_SNAKE
 
@@ -8,6 +11,40 @@
 INCTXT(vshader_src, "../src/vertex_shader.glsl");
 INCTXT(fshader_src, "../src/fragment_shader.glsl");
 
+void printLog(GLuint resource) {
+	GLsizei len, cap;
+	enum {
+		prog,
+		shad,
+		other
+	} type = glIsProgram(resource)  ? prog
+		 : glIsShader(resource) ? shad
+					: other;
+	switch (type) {
+	case prog: glGetProgramiv(resource, GL_INFO_LOG_LENGTH, &cap); break;
+	case shad: glGetShaderiv(resource, GL_INFO_LOG_LENGTH, &cap); break;
+	default: return;
+	}
+	GLchar *log = (GLchar *)malloc(cap);
+	if (!log) {
+		SDL_Log("malloc(): %s", strerror(errno));
+		return;
+	}
+	switch (type) {
+	case prog: glGetProgramInfoLog(resource, cap, &len, log); break;
+	case shad: glGetShaderInfoLog(resource, cap, &len, log); break;
+	default: return;
+	}
+	if (len > 0) {
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s: %s",
+			     type == prog   ? "program"
+			     : type == shad ? "shader"
+					    : "other",
+			     log);
+	}
+	free(log);
+}
+
 GLuint makeShader(GLint type, GLchar const *src) {
 	GLuint shader = glCreateShader(type);
 	glShaderSource(shader, 1, &src, NULL);
@@ -16,7 +53,7 @@ GLuint makeShader(GLint type, GLchar const *src) {
 	GLint ok = GL_FALSE;
 	glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
 	if (ok == GL_FALSE) {
-		SDL_Log("glCompileShader(): %s", "TODO: error message");
+		printLog(shader);
 		return -1;
 	}
 
@@ -62,7 +99,7 @@ int main(int argc, char **argv) {
 	GLint ok = GL_FALSE;
 	glGetProgramiv(prog, GL_LINK_STATUS, &ok);
 	if (ok == GL_FALSE) {
-		SDL_Log("glLinkProgram(): %s", "TODO: error message");
+		printLog(prog);
 		return 1;
 	}
 
