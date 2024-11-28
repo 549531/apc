@@ -106,19 +106,20 @@ int main(int argc, char **argv) {
 	SDL_Event evt;
 	bool running = true;
 	while (running) {
-		if (!SDL_WaitEvent(&evt)) {
-			SDL_Log("SDL_WaitEvent(): %s", SDL_GetError());
-			return 1;
+		while (SDL_PollEvent(&evt)) {
+			switch (evt.type) {
+			case SDL_QUIT: running = false; break;
+			case SDL_KEYDOWN:
+				switch (evt.key.keysym.sym) {
+				case SDLK_q: running = false; break;
+				}
+				break;
+			}
 		}
 
-		switch (evt.type) {
-		case SDL_QUIT: running = false; break;
-		case SDL_KEYDOWN:
-			switch (evt.key.keysym.sym) {
-			case SDLK_q: running = false; break;
-			}
-			break;
-		}
+		// render
+
+		SDL_Delay(16);
 	}
 
 	SDL_DestroyWindow(win);
