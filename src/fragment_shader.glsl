@@ -1,3 +1,9 @@
 #version 140
-out vec4 LFragment;
-void main() { LFragment = vec4(1.0, 1.0, 1.0, 1.0); }
+
+in vec2 pos;     // position of the pixel, both x and y in range of [-1; 1]
+out vec4 color;  // the color of the pixel, RGBA
+
+void main() {
+	// TODO: draw something
+	color = vec4(pos, 0, 1);
+}

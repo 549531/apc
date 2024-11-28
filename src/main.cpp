@@ -1,6 +1,5 @@
-#include <cerrno>
-#include <cstring>
 
+#include <cerrno>
 #define INCBIN_PREFIX
 #define INCBIN_STYLE INCBIN_STYLE_SNAKE
 
@@ -8,9 +7,12 @@
 #include <SDL.h>
 #include <incbin.h>
 
+// include shaders as strings
 INCTXT(vshader_src, "../src/vertex_shader.glsl");
 INCTXT(fshader_src, "../src/fragment_shader.glsl");
 
+/// Prints compilation log of a resource (program or shader).
+/// @param resource The resource's handle.
 void printLog(GLuint resource) {
 	GLsizei len, cap;
 	enum {
@@ -45,6 +47,10 @@ void printLog(GLuint resource) {
 	free(log);
 }
 
+/// Creates and compiles a shader.
+/// @param type The type of the shader.
+/// @param src The shader's source code.
+/// @returns the shader's handle.
 GLuint makeShader(GLint type, GLchar const *src) {
 	GLuint shader = glCreateShader(type);
 	glShaderSource(shader, 1, &src, NULL);
@@ -60,12 +66,22 @@ GLuint makeShader(GLint type, GLchar const *src) {
 	return shader;
 }
 
+/// Create an OpenGL buffer.
+/// sizeof(@param data) must be equal to @param len.
+GLuint makeBuffer(GLenum type, GLenum usage, void *data, size_t len) {
+	GLuint buf;
+	glGenBuffers(1, &buf);
+	glBindBuffer(type, buf);
+	glBufferData(type, len, data, usage);
+	return buf;
+}
+
 int main(int argc, char **argv) {
 	SDL_Init(SDL_INIT_EVERYTHING);
 
 	SDL_Window *win = SDL_CreateWindow(
 	    "Main window", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,  //
-	    640, 480, SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
+	    500, 500, SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
 	if (!win) {
 		SDL_Log("SDL_CreateWindow(): %s", SDL_GetError());
 		return 1;
@@ -77,10 +93,12 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	// Enable double buffering AKA vsync
 	if (SDL_GL_SetSwapInterval(1) < 0) {
 		SDL_Log("SDL_GL_SetSwapInterval(): %s", SDL_GetError());
 	}
 
+	// Initialize OpenGL functions
 	GLenum err = glewInit();
 	if (err != GLEW_OK) {
 		SDL_Log("glewInit(): %s", glewGetErrorString(err));
@@ -103,6 +121,45 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	err = glGetError();
+	if (err != GL_NO_ERROR) {
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+			     "while binding opengl program: %s",
+			     gluErrorString(err));
+		return 1;
+	}
+
+	// Get a handle to the in_pos variable in the vertex shader.
+	// This handle will be used to pass current pixel's coordinates
+	// to the vertex shader.
+	GLint position = glGetAttribLocation(prog, "in_pos");
+	if (position == -1) {
+		SDL_LogError(
+		    SDL_LOG_CATEGORY_APPLICATION,
+		    "could not find variable `in_pos' in the vertex shader");
+		return 1;
+	}
+
+	// This rectangle will be drawn on screen,
+	// then the fragment shader will draw on this rectangle.
+	GLfloat rectangle[][2] = {
+	    {-1, -1},
+	    {+1, -1},
+	    {+1, +1},
+	    {-1, +1},
+	};
+	GLuint indices[] = {0, 1, 2, 3};
+
+	GLuint rectBuf = makeBuffer(GL_ARRAY_BUFFER, GL_STATIC_DRAW, rectangle,
+				    sizeof rectangle);
+
+	GLuint indexBuf = makeBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_STATIC_DRAW,
+				     indices, sizeof indices);
+
+	// Set background color
+	glClearColor(0, 0, 0, 1);
+
+	// Main event loop
 	SDL_Event evt;
 	bool running = true;
 	while (running) {
@@ -117,10 +174,34 @@ int main(int argc, char **argv) {
 			}
 		}
 
-		// render
+		// Begin rendering
 
+		// FIXME: I have no idea what this does, but it works
+
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		glUseProgram(prog);
+		glEnableVertexAttribArray(position);
+
+		glBindBuffer(GL_ARRAY_BUFFER, rectBuf);
+		glVertexAttribPointer(position, 2, GL_FLOAT, GL_FALSE,
+				      sizeof *rectangle, nullptr);
+
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuf);
+		glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, nullptr);
+
+		glDisableVertexAttribArray(position);
+		glUseProgram(0);
+
+		SDL_GL_SwapWindow(win);
+
+		// Wait 16ms to get approx. 60 FPS
+		// Actual FPS will be lower,
+		// because event processing + rendering takes time
 		SDL_Delay(16);
 	}
+
+	// TODO: clean up OpenGL resources
 
 	SDL_DestroyWindow(win);
 	SDL_Quit();
