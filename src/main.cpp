@@ -3,13 +3,14 @@
 
 #include <GL/glew.h>
 #include <SDL.h>
+#include <SDL_timer.h>
 #include <incbin.h>
 
 #include <cerrno>
 
 // include shaders as strings
-INCTXT(vshader_src, "../src/vertex_shader.glsl");
-INCTXT(fshader_src, "../src/fragment_shader.glsl");
+INCTXT(vshader_src, "../src/shader.vert");
+INCTXT(fshader_src, "../src/shader.frag");
 
 /// Prints compilation log of a resource (program or shader).
 /// @param resource The resource's handle.
@@ -113,6 +114,8 @@ int main(int argc, char **argv) {
 	glAttachShader(prog, vshader);
 	glAttachShader(prog, fshader);
 	glLinkProgram(prog);
+	glDeleteShader(vshader);
+	glDeleteShader(fshader);
 
 	GLint ok = GL_FALSE;
 	glGetProgramiv(prog, GL_LINK_STATUS, &ok);
@@ -140,13 +143,23 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	// Get a handle to the time variable in the fragment shader.
+	// This handle will be used to animate things.
+	GLint time = glGetUniformLocation(prog, "time");
+	if (position == -1) {
+		SDL_LogError(
+		    SDL_LOG_CATEGORY_APPLICATION,
+		    "could not find variable `time' in the fragment shader");
+		return 1;
+	}
+
 	// This rectangle will be drawn on screen,
 	// then the fragment shader will draw on this rectangle.
-	GLfloat rectangle[][2] = {
-	    {-1, -1},
-	    {+1, -1},
-	    {+1, +1},
-	    {-1, +1},
+	GLfloat rectangle[][3] = {
+	    {-1, -1, 0},
+	    {+1, -1, 0},
+	    {+1, +1, 0},
+	    {-1, +1, 0},
 	};
 	GLuint indices[] = {0, 1, 2, 3};
 
@@ -176,12 +189,12 @@ int main(int argc, char **argv) {
 
 		// Begin rendering
 
-		// FIXME: I have no idea what this does, but it works
-
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		glUseProgram(prog);
 		glEnableVertexAttribArray(position);
+
+		glUniform1ui(time, SDL_GetTicks());
 
 		glBindBuffer(GL_ARRAY_BUFFER, rectBuf);
 		glVertexAttribPointer(position, 2, GL_FLOAT, GL_FALSE,
@@ -201,7 +214,7 @@ int main(int argc, char **argv) {
 		SDL_Delay(16);
 	}
 
-	// TODO: clean up OpenGL resources
+	glDeleteProgram(prog);
 
 	SDL_DestroyWindow(win);
 	SDL_Quit();
