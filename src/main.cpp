@@ -15,18 +15,19 @@ GLuint makeBuffer(GLenum type, GLenum usage, void* data, size_t len);
 
 int main(int argc, char** argv) 
 {
-    // Initialize SDL and create a window
     if (SDL_Init(SDL_INIT_VIDEO) != 0) return -1;
     SDL_Window* window = SDL_CreateWindow("Gradient Shader", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, SDL_WINDOW_OPENGL);
     SDL_GLContext context = SDL_GL_CreateContext(window);
-
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    
     glewInit();
 
-    // Check if we want to use GPU or CPU
-    bool useGPU = false;
+    // OpenGL or SDL
+    bool useOpenGL = true;
 
-    if (useGPU) {
-        // Setup OpenGL shaders
+    if (useOpenGL) 
+    {
+        // OpenGL shaders
         GLuint vertexShader = makeShader(GL_VERTEX_SHADER, vShaderSource);
         GLuint fragmentShader = makeShader(GL_FRAGMENT_SHADER, fShaderSource);
         GLuint program = glCreateProgram();
@@ -55,11 +56,52 @@ int main(int argc, char** argv)
 
             SDL_GL_SwapWindow(window);
         }
-    } else {
+    } 
+    else 
+    {
         const int width = 800, height = 600;
         std::vector<Color> framebuffer(width * height);
         generateGradientCPU(framebuffer, width, height);
-        // Display gradient here (using SDL surfaces)
+        
+        SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, width, height);
+        if (!texture) {
+            std::cerr << "Failed to create texture: " << SDL_GetError() << std::endl;
+            SDL_DestroyRenderer(renderer);
+            SDL_DestroyWindow(window);
+            SDL_Quit();
+            return -1;
+        }
+
+        // Main event loop
+        bool running = true;
+        SDL_Event event;
+
+        while (running) {
+            // Poll events
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT) {
+                    running = false; // Exit the loop
+                }
+            }
+
+            // Update the texture with the framebuffer data
+            void* pixels = nullptr;
+            int pitch = 0;
+            if (SDL_LockTexture(texture, nullptr, &pixels, &pitch) == 0) {
+                memcpy(pixels, framebuffer.data(), framebuffer.size() * sizeof(Color));
+                SDL_UnlockTexture(texture);
+            } else {
+                std::cerr << "Failed to lock texture: " << SDL_GetError() << std::endl;
+            }
+
+            // Render the texture
+            SDL_RenderClear(renderer);
+            SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+            SDL_RenderPresent(renderer);
+        }
+
+        // Cleanup CPU resources
+        SDL_DestroyTexture(texture);
     }
 
     SDL_Quit();
