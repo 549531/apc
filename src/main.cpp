@@ -1,11 +1,11 @@
-
-#include <cerrno>
 #define INCBIN_PREFIX
 #define INCBIN_STYLE INCBIN_STYLE_SNAKE
 
 #include <GL/glew.h>
 #include <SDL.h>
 #include <incbin.h>
+
+#include <cerrno>
 
 // include shaders as strings
 INCTXT(vshader_src, "../src/vertex_shader.glsl");
