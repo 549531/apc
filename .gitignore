@@ -3,3 +3,5 @@
 .direnv
 compile_commands.json
 result*
+
+build/
