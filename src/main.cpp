@@ -82,7 +82,8 @@ int main(int argc, char **argv) {
 
 	SDL_Window *win = SDL_CreateWindow(
 	    "Main window", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,  //
-	    500, 500, SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
+	    500, 500,
+	    SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
 	if (!win) {
 		SDL_Log("SDL_CreateWindow(): %s", SDL_GetError());
 		return 1;
@@ -182,6 +183,16 @@ int main(int argc, char **argv) {
 			case SDL_KEYDOWN:
 				switch (evt.key.keysym.sym) {
 				case SDLK_q: running = false; break;
+				}
+				break;
+			case SDL_WINDOWEVENT:
+				if (evt.window.event ==
+				    SDL_WINDOWEVENT_SIZE_CHANGED) {
+					auto w = evt.window.data1;
+					auto h = evt.window.data2;
+					auto size = w < h ? w : h;
+					glViewport((w - size) / 2,
+						   (h - size) / 2, size, size);
 				}
 				break;
 			}
