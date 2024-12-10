@@ -1,0 +1,14 @@
+﻿---
+BasedOnStyle: Google
+AllowShortBlocksOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Always
+AllowShortLoopsOnASingleLine: true
+DerivePointerAlignment: no
+IndentCaseLabels: no
+IndentWidth: 8
+InsertNewlineAtEOF: true
+PointerAlignment: Right
+UseTab: ForContinuationAndIndentation
+...
