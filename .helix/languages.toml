@@ -1,0 +1,7 @@
+[[language]]
+name = 'glsl'
+language-servers = ['glslls']
+
+[language-server.glslls]
+command = 'glslls'
+args = ['--stdin']
