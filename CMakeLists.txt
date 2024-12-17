@@ -18,8 +18,8 @@ CPMAddPackage(
 find_package(GLEW REQUIRED)
 find_package(OpenGL REQUIRED)
 
-add_executable(apc src/main.cpp src/helpers.cpp)
+add_executable(apc src/main.cpp)
 target_link_libraries(apc SDL2::SDL2main SDL2::SDL2 GLEW::GLEW  OpenGL::GL OpenGL::GLU)
-target_include_directories(apc PRIVATE ${incbin_SOURCE_DIR} PRIVATE include)
+target_include_directories(apc PRIVATE ${incbin_SOURCE_DIR})
 
 install(TARGETS apc DESTINATION bin)
