@@ -42,4 +42,4 @@ jobs:
         purge-primary-key: never
 
     - name: Build
-      run: nix build .#ci
+      run: nix build -L .#ci

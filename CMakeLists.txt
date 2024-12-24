@@ -16,9 +16,16 @@ CPMAddPackage(
   GIT_TAG main)
 
 find_package(GLEW REQUIRED)
+find_package(OpenGL REQUIRED)
 
 add_executable(apc src/main.cpp)
-target_link_libraries(apc SDL2::SDL2 GLEW::GLEW)
+
+if(SDL2_SDL2main_FOUND)
+  target_link_libraries(apc SDL2::SDL2main)
+endif()
+
+target_link_libraries(apc SDL2::SDL2 GLEW::GLEW OpenGL::GL OpenGL::GLU)
+
 target_include_directories(apc PRIVATE ${incbin_SOURCE_DIR})
 
 install(TARGETS apc DESTINATION bin)
