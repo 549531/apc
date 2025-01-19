@@ -1,3 +1,4 @@
+#include <SDL_keycode.h>
 #define INCBIN_PREFIX
 #define INCBIN_STYLE INCBIN_STYLE_SNAKE
 
@@ -176,6 +177,7 @@ int main(int argc, char **argv) {
 	// Main event loop
 	SDL_Event evt;
 	bool running = true;
+	bool paused = false;
 	while (running) {
 		while (SDL_PollEvent(&evt)) {
 			switch (evt.type) {
@@ -183,6 +185,7 @@ int main(int argc, char **argv) {
 			case SDL_KEYDOWN:
 				switch (evt.key.keysym.sym) {
 				case SDLK_q: running = false; break;
+				case SDLK_SPACE: paused = !paused; break;
 				}
 				break;
 			case SDL_WINDOWEVENT:
@@ -205,8 +208,7 @@ int main(int argc, char **argv) {
 		glUseProgram(prog);
 		glEnableVertexAttribArray(position);
 
-		glUniform1ui(time, SDL_GetTicks());
-
+		if (!paused) { glUniform1ui(time, SDL_GetTicks()); }
 		glBindBuffer(GL_ARRAY_BUFFER, rectBuf);
 		glVertexAttribPointer(position, 2, GL_FLOAT, GL_FALSE,
 				      sizeof *rectangle, nullptr);
