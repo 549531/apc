@@ -1,234 +1,354 @@
-#include <SDL_keycode.h>
-#define INCBIN_PREFIX
-#define INCBIN_STYLE INCBIN_STYLE_SNAKE
-
 #include <GL/glew.h>
 #include <SDL.h>
-#include <SDL_timer.h>
-#include <incbin.h>
 
-#include <cerrno>
+#include <format>
+#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <memory>
+#include <stdexcept>
 
-// include shaders as strings
-INCTXT(vshader_src, "../src/shader.vert");
-INCTXT(fshader_src, "../src/shader.frag");
+struct GlShader {
+	GLuint m_handle;
 
-/// Prints compilation log of a resource (program or shader).
-/// @param resource The resource's handle.
-void printLog(GLuint resource) {
-	GLsizei len, cap;
-	enum {
-		prog,
-		shad,
-		other
-	} type = glIsProgram(resource)  ? prog
-		 : glIsShader(resource) ? shad
-					: other;
-	switch (type) {
-	case prog: glGetProgramiv(resource, GL_INFO_LOG_LENGTH, &cap); break;
-	case shad: glGetShaderiv(resource, GL_INFO_LOG_LENGTH, &cap); break;
-	default: return;
-	}
-	GLchar *log = (GLchar *)malloc(cap);
-	if (!log) {
-		SDL_Log("malloc(): %s", strerror(errno));
-		return;
-	}
-	switch (type) {
-	case prog: glGetProgramInfoLog(resource, cap, &len, log); break;
-	case shad: glGetShaderInfoLog(resource, cap, &len, log); break;
-	default: return;
-	}
-	if (len > 0) {
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s: %s",
-			     type == prog   ? "program"
-			     : type == shad ? "shader"
-					    : "other",
-			     log);
-	}
-	free(log);
-}
+	GlShader(GLint type, std::string_view src) {
+		m_handle = glCreateShader(type);
 
-/// Creates and compiles a shader.
-/// @param type The type of the shader.
-/// @param src The shader's source code.
-/// @returns the shader's handle.
-GLuint makeShader(GLint type, GLchar const *src) {
-	GLuint shader = glCreateShader(type);
-	glShaderSource(shader, 1, &src, NULL);
-	glCompileShader(shader);
+		char const *srcs[] = {src.data()};
+		GLint sizes[] = {
+		    static_cast<GLint>(src.size()),
+		};
+		glShaderSource(m_handle, 1, srcs, sizes);
 
-	GLint ok = GL_FALSE;
-	glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
-	if (ok == GL_FALSE) {
-		printLog(shader);
-		return -1;
+		glCompileShader(m_handle);
+		if (getParam(GL_COMPILE_STATUS) == GL_FALSE) {
+			throw std::runtime_error{getInfoLog()};
+		}
 	}
 
-	return shader;
-}
+	~GlShader() { glDeleteShader(m_handle); }
 
-/// Create an OpenGL buffer.
-/// sizeof(@param data) must be equal to @param len.
-GLuint makeBuffer(GLenum type, GLenum usage, void *data, size_t len) {
-	GLuint buf;
-	glGenBuffers(1, &buf);
-	glBindBuffer(type, buf);
-	glBufferData(type, len, data, usage);
-	return buf;
+	GLint getParam(GLenum pname) const {
+		GLint param;
+		glGetShaderiv(m_handle, pname, &param);
+		return param;
+	}
+
+	std::string getInfoLog() const {
+		GLsizei cap = getParam(GL_INFO_LOG_LENGTH);
+		auto buf = std::make_unique<char[]>(cap);
+		GLsizei len;
+		glGetShaderInfoLog(m_handle, cap, &len, buf.get());
+		return std::string{buf.get(), static_cast<size_t>(len)};
+	}
+};
+
+struct GlProgram {
+	GLuint m_handle;
+
+	GlProgram() { m_handle = glCreateProgram(); }
+
+	~GlProgram() { glDeleteProgram(m_handle); }
+
+	void attachShader(GlShader const &shader) {
+		glAttachShader(m_handle, shader.m_handle);
+	}
+
+	void link() {
+		glLinkProgram(m_handle);
+
+		if (getParam(GL_LINK_STATUS) == GL_FALSE) {
+			throw std::runtime_error{getInfoLog()};
+		}
+	}
+
+	GLint getParam(GLenum pname) const {
+		GLint param;
+		glGetProgramiv(m_handle, pname, &param);
+		return param;
+	}
+
+	std::string getInfoLog() const {
+		GLsizei cap = getParam(GL_INFO_LOG_LENGTH);
+		auto buf = std::make_unique<char[]>(cap);
+		GLsizei len;
+		glGetProgramInfoLog(m_handle, cap, &len, buf.get());
+		return std::string{buf.get(), static_cast<size_t>(len)};
+	}
+
+	// Mark the program as current.
+	// The following computations will be made by this program.
+	void use() { glUseProgram(m_handle); }
+};
+
+// Represents an OpenGL buffer.
+struct GlBuffer {
+	GLenum m_buffer_type, m_usage, m_element_type;
+	GLuint m_handle;
+	size_t m_size, m_nmemb;
+
+	template <typename ForwardIterator>
+	GlBuffer(GLenum buffer_type, GLenum usage, GLenum element_type,
+		 ForwardIterator begin, ForwardIterator end)
+	    : m_buffer_type{buffer_type},
+	      m_usage{usage},
+	      m_element_type{element_type} {
+		glGenBuffers(1, &m_handle);
+		set(begin, end);
+	}
+
+	// Marks this buffer as current.
+	// Further method calls will operate on this buffer.
+	void bind() { glBindBuffer(m_buffer_type, m_handle); }
+
+	// Copies data to the buffer.
+	// sizeof(@data) must be equal to @size.
+	template <typename ForwardIterator>
+	void set(ForwardIterator begin, ForwardIterator end) {
+		m_size = sizeof *begin;
+		m_nmemb = end - begin;
+		bind();
+		glBufferData(m_buffer_type, m_size * m_nmemb, begin, m_usage);
+	}
+
+	void drawElements(GLenum mode) {
+		bind();
+		glDrawElements(mode, m_nmemb, m_element_type, nullptr);
+	}
+};
+
+enum GlVariableType {
+	GlVarUniform1ui,
+	GlVarAttribute,
+};
+
+template <GlVariableType T>
+struct GlVariable;
+
+template <>
+struct GlVariable<GlVarUniform1ui> {
+	GLint m_handle;
+
+	GlVariable(GlProgram const &program, GLchar const *name) {
+		m_handle = glGetUniformLocation(program.m_handle, name);
+		if (m_handle == -1) {
+			throw std::runtime_error{
+			    std::format("could not find uniform variable `{}' "
+					"in the shader",
+					name)};
+		}
+	}
+
+	void set(GLuint value) { glUniform1ui(m_handle, value); }
+};
+
+template <>
+struct GlVariable<GlVarAttribute> {
+	GLint m_handle;
+	GLenum m_type;
+
+	GlVariable(GlProgram const &program, GLchar const *name, GLenum type)
+	    : m_type{type} {
+		m_handle = glGetAttribLocation(program.m_handle, name);
+		if (m_handle == -1) {
+			throw std::runtime_error{
+			    std::format("could not find uniform variable `{}' "
+					"in the shader",
+					name)};
+		}
+	}
+
+	void enable() { glEnableVertexAttribArray(m_handle); }
+
+	void set(GlBuffer &buf, GLboolean normalized, GLint size,
+		 GLsizei stride = 0) {
+		if (stride == 0) {
+			// by default, stride == size
+			stride = size;
+		}
+		buf.bind();
+		glVertexAttribPointer(m_handle, size, m_type, normalized,
+				      stride * buf.m_size, nullptr);
+	}
+};
+
+std::string read_file(std::string_view filename) {
+	std::ifstream file{filename.data()};
+	if (!file) {
+		throw std::runtime_error{
+		    std::format("could not open file {}", filename)};
+	}
+	return std::string{std::istreambuf_iterator<char>(file),
+			   std::istreambuf_iterator<char>()};
 }
 
 int main(int argc, char **argv) {
 	SDL_Init(SDL_INIT_EVERYTHING);
 
-	SDL_Window *win = SDL_CreateWindow(
-	    "Main window", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,  //
-	    500, 500,
-	    SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-	if (!win) {
-		SDL_Log("SDL_CreateWindow(): %s", SDL_GetError());
-		return 1;
-	}
-
-	SDL_GLContext ctx = SDL_GL_CreateContext(win);
-	if (!ctx) {
-		SDL_Log("SDL_GL_CreateContext(): %s", SDL_GetError());
-		return 1;
-	}
-
-	// Enable double buffering AKA vsync
-	if (SDL_GL_SetSwapInterval(1) < 0) {
-		SDL_Log("SDL_GL_SetSwapInterval(): %s", SDL_GetError());
-	}
-
-	// Initialize OpenGL functions
-	GLenum err = glewInit();
-	if (err != GLEW_OK) {
-		SDL_Log("glewInit(): %s", glewGetErrorString(err));
-		return 1;
-	}
-
-	GLuint vshader = makeShader(GL_VERTEX_SHADER, vshader_src_data);
-	GLuint fshader = makeShader(GL_FRAGMENT_SHADER, fshader_src_data);
-	if (vshader == -1 || fshader == -1) return 1;
-
-	GLuint prog = glCreateProgram();
-	glAttachShader(prog, vshader);
-	glAttachShader(prog, fshader);
-	glLinkProgram(prog);
-	glDeleteShader(vshader);
-	glDeleteShader(fshader);
-
-	GLint ok = GL_FALSE;
-	glGetProgramiv(prog, GL_LINK_STATUS, &ok);
-	if (ok == GL_FALSE) {
-		printLog(prog);
-		return 1;
-	}
-
-	err = glGetError();
-	if (err != GL_NO_ERROR) {
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-			     "while binding opengl program: %s",
-			     gluErrorString(err));
-		return 1;
-	}
-
-	// Get a handle to the in_pos variable in the vertex shader.
-	// This handle will be used to pass current pixel's coordinates
-	// to the vertex shader.
-	GLint position = glGetAttribLocation(prog, "in_pos");
-	if (position == -1) {
-		SDL_LogError(
-		    SDL_LOG_CATEGORY_APPLICATION,
-		    "could not find variable `in_pos' in the vertex shader");
-		return 1;
-	}
-
-	// Get a handle to the time variable in the fragment shader.
-	// This handle will be used to animate things.
-	GLint time = glGetUniformLocation(prog, "time");
-	if (position == -1) {
-		SDL_LogError(
-		    SDL_LOG_CATEGORY_APPLICATION,
-		    "could not find variable `time' in the fragment shader");
-		return 1;
-	}
-
-	// This rectangle will be drawn on screen,
-	// then the fragment shader will draw on this rectangle.
-	GLfloat rectangle[][3] = {
-	    {-1, -1, 0},
-	    {+1, -1, 0},
-	    {+1, +1, 0},
-	    {-1, +1, 0},
-	};
-	GLuint indices[] = {0, 1, 2, 3};
-
-	GLuint rectBuf = makeBuffer(GL_ARRAY_BUFFER, GL_STATIC_DRAW, rectangle,
-				    sizeof rectangle);
-
-	GLuint indexBuf = makeBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_STATIC_DRAW,
-				     indices, sizeof indices);
-
-	// Set background color
-	glClearColor(0, 0, 0, 1);
-
-	// Main event loop
-	SDL_Event evt;
-	bool running = true;
-	bool paused = false;
-	while (running) {
-		while (SDL_PollEvent(&evt)) {
-			switch (evt.type) {
-			case SDL_QUIT: running = false; break;
-			case SDL_KEYDOWN:
-				switch (evt.key.keysym.sym) {
-				case SDLK_q: running = false; break;
-				case SDLK_SPACE: paused = !paused; break;
-				}
-				break;
-			case SDL_WINDOWEVENT:
-				if (evt.window.event ==
-				    SDL_WINDOWEVENT_SIZE_CHANGED) {
-					auto w = evt.window.data1;
-					auto h = evt.window.data2;
-					auto size = w < h ? w : h;
-					glViewport((w - size) / 2,
-						   (h - size) / 2, size, size);
-				}
-				break;
-			}
+	try {
+		SDL_Window *win =
+		    SDL_CreateWindow("Main window", SDL_WINDOWPOS_CENTERED,
+				     SDL_WINDOWPOS_CENTERED,  //
+				     500, 500,
+				     SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL |
+					 SDL_WINDOW_RESIZABLE);
+		if (!win) {
+			throw std::runtime_error{std::format(
+			    "SDL_CreateWindow(): {}", SDL_GetError())};
 		}
 
-		// Begin rendering
+		SDL_GLContext ctx = SDL_GL_CreateContext(win);
+		if (!ctx) {
+			throw std::runtime_error{std::format(
+			    "SDL_GL_CreateContext(): {}", SDL_GetError())};
+		}
 
-		glClear(GL_COLOR_BUFFER_BIT);
+		// Enable double buffering AKA vsync
+		if (SDL_GL_SetSwapInterval(1) < 0) {
+			throw std::runtime_error{std::format(
+			    "SDL_GL_SetSwapInterval(): {}", SDL_GetError())};
+		}
 
-		glUseProgram(prog);
-		glEnableVertexAttribArray(position);
+		// Initialize OpenGL functions
+		GLenum err = glewInit();
+		if (err != GLEW_OK) {
+			auto msg = reinterpret_cast<char const *>(
+			    glewGetErrorString(err));
+			throw std::runtime_error{
+			    std::format("glewInit(): {}", msg)};
+		}
 
-		if (!paused) { glUniform1ui(time, SDL_GetTicks()); }
-		glBindBuffer(GL_ARRAY_BUFFER, rectBuf);
-		glVertexAttribPointer(position, 2, GL_FLOAT, GL_FALSE,
-				      sizeof *rectangle, nullptr);
+		GlProgram program;
 
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuf);
-		glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, nullptr);
+		{
+			auto vertex_shader = GlShader{
+			    GL_VERTEX_SHADER, read_file("src/shader.vert")};
 
-		glDisableVertexAttribArray(position);
-		glUseProgram(0);
+			auto fragment_shader = GlShader{
+			    GL_FRAGMENT_SHADER, read_file("src/shader.frag")};
 
-		SDL_GL_SwapWindow(win);
+			program.attachShader(vertex_shader);
+			program.attachShader(fragment_shader);
+			program.link();
+			// shaders are not needed anymore, so they get deleted
+		}
 
-		// Wait 16ms to get approx. 60 FPS
-		// Actual FPS will be lower,
-		// because event processing + rendering takes time
-		SDL_Delay(16);
+		// Get a handle to the in_pos variable in the vertex shader.
+		// This handle will be used to pass current pixel's coordinates
+		// to the vertex shader.
+		GlVariable<GlVarAttribute> positionAttr{program, "in_pos",
+							GL_FLOAT};
+
+		// Get a handle to the time variable in the fragment shader.
+		// This handle will be used to animate things.
+		GlVariable<GlVarUniform1ui> timeUf{program, "time"};
+
+		constexpr size_t point_count = 4;
+
+		// This rectangle will be drawn on screen,
+		// then the fragment shader will color this rectangle.
+		std::array<std::array<GLfloat, 3>, point_count> rectangle{{
+		    {-1, -1, 0},
+		    {+1, -1, 0},
+		    {+1, +1, 0},
+		    {-1, +1, 0},
+		}};
+
+		std::array<GLuint, point_count> indices{{0, 1, 2, 3}};
+
+		GlBuffer rectangleBuf{GL_ARRAY_BUFFER, GL_STATIC_DRAW, GL_FLOAT,
+				      rectangle.begin(), rectangle.end()};
+
+		GlBuffer indexBuf{GL_ELEMENT_ARRAY_BUFFER, GL_STATIC_DRAW,
+				  GL_UNSIGNED_INT, indices.begin(),
+				  indices.end()};
+
+		program.use();
+		positionAttr.enable();
+
+		// Set background color
+		glClearColor(0, 0, 0, 1);
+
+		// Main event loop
+		SDL_Event evt;
+		bool running = true;
+		bool paused = false;
+		Uint32 prev_ticks = 0, total_ticks = 0;
+
+		// time between two consecutive frames
+		const auto period =
+		    SDL_GetPerformanceFrequency() / 60;  // 60fps
+
+		while (running) {
+			auto start = SDL_GetPerformanceCounter();
+
+			// Process events (e.g. key presses)
+			while (SDL_PollEvent(&evt)) {
+				switch (evt.type) {
+				case SDL_QUIT: running = false; break;
+				case SDL_KEYDOWN:
+					switch (evt.key.keysym.sym) {
+					case SDLK_q: running = false; break;
+					case SDLK_SPACE:
+						paused = !paused;
+						break;
+					}
+					break;
+				case SDL_WINDOWEVENT:
+					switch (evt.window.event) {
+					case SDL_WINDOWEVENT_SIZE_CHANGED:
+						auto w = evt.window.data1;
+						auto h = evt.window.data2;
+						auto size = w < h ? w : h;
+						glViewport((w - size) / 2,
+							   (h - size) / 2, size,
+							   size);
+						break;
+					}
+					break;
+				}
+			}
+
+			// Timekeeping: compute how much time passed
+			// since last render
+			auto ticks = SDL_GetTicks();
+			auto delta = ticks - prev_ticks;
+			prev_ticks = ticks;
+			if (!paused) { total_ticks += delta; }
+
+			// Begin rendering
+			if (!paused) {
+				// Send current time to the shader
+				timeUf.set(total_ticks);
+
+				// Send coordinates to the shader
+				positionAttr.set(rectangleBuf, GL_FALSE, 2, 1);
+
+				// Clear the buffer
+				glClear(GL_COLOR_BUFFER_BIT);
+
+				// Render to the buffer
+				indexBuf.drawElements(GL_TRIANGLE_FAN);
+
+				// Send the buffer to the screen
+				SDL_GL_SwapWindow(win);
+
+				std::clog << std::format(
+				    "delta: {:3} fps: {:>6.03f}\n", delta,
+				    1000. / delta);
+			}
+
+			auto timeSpent = SDL_GetPerformanceCounter() - start;
+
+			// how much time till next frame?
+			SDL_Delay((period - timeSpent % period) * 1000 /
+				  SDL_GetPerformanceFrequency());
+		}
+
+		SDL_DestroyWindow(win);
+	} catch (std::exception &e) {
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", e.what());
 	}
 
-	glDeleteProgram(prog);
-
-	SDL_DestroyWindow(win);
 	SDL_Quit();
 }
