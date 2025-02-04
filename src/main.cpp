@@ -186,12 +186,12 @@ int main(int argc, char **argv) {
 	SDL_Init(SDL_INIT_EVERYTHING);
 
 	try {
-		SDL_Window *win =
-		    SDL_CreateWindow("Main window", SDL_WINDOWPOS_CENTERED,
-				     SDL_WINDOWPOS_CENTERED,  //
-				     500, 500,
-				     SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL |
-					 SDL_WINDOW_RESIZABLE);
+		auto win_xy = SDL_WINDOWPOS_CENTERED;
+		auto win_wh = 500;
+		auto win_attrs =
+		    SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
+		SDL_Window *win = SDL_CreateWindow(
+		    "Main window", win_xy, win_xy, win_wh, win_wh, win_attrs);
 		if (!win) {
 			throw std::runtime_error{std::format(
 			    "SDL_CreateWindow(): {}", SDL_GetError())};
